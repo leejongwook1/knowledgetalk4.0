@@ -14,14 +14,11 @@ document.addEventListener("DOMContentLoaded", function () {
   let reqNo = 1;
   let localStream;
   let peerCon;
-  let configuration = [];
 
   let members;
   let roomId;
   let userId;
-  let host;
 
-  let peers = {};
   let streams = {};
 
   CreateRoomBtn.addEventListener("click", function (e) {
@@ -75,7 +72,6 @@ document.addEventListener("DOMContentLoaded", function () {
       sdp: sdp,
       usage: "cam",
       userId: userId,
-      host: true,
     };
 
     try {
@@ -136,8 +132,12 @@ document.addEventListener("DOMContentLoaded", function () {
       tLogBox("error", "eventOp undefined");
     }
 
+    if (data.eventOp === "KeepAlive") {
+      console.log("keepalive");
+    }
+
     //통화 방 생성 응답
-    if (data.eventOp === "CreateRoom") {
+    else if (data.eventOp === "CreateRoom") {
       tTextbox(`방이 생성되었습니다.`);
       roomIdInput.value = data.roomId;
 
@@ -181,7 +181,6 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
       peerCon = new RTCPeerConnection();
-      peerCon.ontrack = onAddStreamHandler;
     }
 
     //startsession
@@ -197,9 +196,21 @@ document.addEventListener("DOMContentLoaded", function () {
         if (data.sdp && data.sdp.type == "offer") {
           createSDPAnswer(data);
         } else if (data.sdp && data.sdp.type == "answer") {
-          peerCon.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          peerCon
+            .setRemoteDescription(new RTCSessionDescription(data.sdp))
+            .then(function () {
+              return navigator.mediaDevices
+                .getUserMedia({
+                  video: true,
+                  audio: true,
+                })
+                .then(function (stream) {
+                  remoteVideo.srcObject = stream;
+                  console.log(stream);
+                });
+            });
+          console.log(peerCon);
         }
-        console.log(peerCon);
         SDPBtn.disabled = true;
         exitBtn.disabled = false;
       }
@@ -245,48 +256,41 @@ document.addEventListener("DOMContentLoaded", function () {
 
   //send sdp answer
   const createSDPAnswer = async (data) => {
-    peerCon = new RTCPeerConnection();
+    console.log(peerCon);
     peerCon.ontrack = (e) => {
       streams = e.streams[0];
 
       remoteVideo.srcObject = streams;
+      console.log(streams);
     };
-    console.log(data);
 
     await peerCon.setRemoteDescription(data.sdp);
     let answerSdp = await peerCon.createAnswer();
     await peerCon.setLocalDescription(answerSdp);
 
-    console.log(answerSdp);
-    console.log(peerCon);
+    peerCon.onicecandidate = (e) => {
+      if (!e.candidate) {
+        let reqData = {
+          cpCode: CPCODE,
+          authKey: AUTHKEY,
+          eventOp: "SDP",
+          sdp: peerCon.localDescription,
+          roomId: data.roomId,
+          usage: "cam",
+          userId: userId,
+        };
 
-    // peerCon.onicecandidate = (e) => {
-    // if (!e.candidate) {
-    let reqData = {
-      cpCode: CPCODE,
-      authKey: AUTHKEY,
-      eventOp: "SDP",
-      sdp: peerCon.localDescription,
-      roomId: data.roomId,
-      usage: "cam",
-      userId: userId,
-    };
-
-    try {
-      tLogBox("send", reqData);
-      signalSocketIo.emit("knowledgetalk", reqData);
-    } catch (err) {
-      if (err instanceof SyntaxError) {
-        alert(" there was a syntaxError it and try again : " + err.message);
-      } else {
-        throw err;
+        try {
+          tLogBox("send", reqData);
+          signalSocketIo.emit("knowledgetalk", reqData);
+        } catch (err) {
+          if (err instanceof SyntaxError) {
+            alert(" there was a syntaxError it and try again : " + err.message);
+          } else {
+            throw err;
+          }
+        }
       }
-    }
-    // }
-    // };
+    };
   };
-
-  function onAddStreamHandler(e) {
-    remoteVideo.srcObject = e.streams[0];
-  }
 });
