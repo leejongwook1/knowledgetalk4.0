@@ -3,7 +3,7 @@ const express = require("express");
 const app = require("express")();
 const path = require("path");
 const host = "127.0.0.1";
-const port = 5000;
+const port = 5500;
 
 app.set("views", path.join(__dirname, "/"));
 app.set("view engine", "html");
